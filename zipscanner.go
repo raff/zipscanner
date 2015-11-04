@@ -55,7 +55,7 @@ func (b *readBuf) uint64() uint64 {
 	return v
 }
 
-type ZipScanner struct {
+type ZipScannerImpl struct {
 	Debug bool
 
 	reader *bufio.Reader
@@ -67,8 +67,8 @@ type ZipScanner struct {
 	err error          // last error
 }
 
-func NewZipScanner(r io.Reader) *ZipScanner {
-	zr := ZipScanner{}
+func NewZipScanner(r io.Reader) *ZipScannerImpl {
+	zr := ZipScannerImpl{}
 
 	if br, ok := r.(*bufio.Reader); ok {
 		zr.reader = br
@@ -79,15 +79,15 @@ func NewZipScanner(r io.Reader) *ZipScanner {
 	return &zr
 }
 
-func (r *ZipScanner) Error() error {
+func (r *ZipScannerImpl) Error() error {
 	return r.err
 }
 
-func (r *ZipScanner) FileHeader() zip.FileHeader {
+func (r *ZipScannerImpl) FileHeader() zip.FileHeader {
 	return r.fh
 }
 
-func (r *ZipScanner) stop(done bool, err error) bool {
+func (r *ZipScannerImpl) stop(done bool, err error) bool {
 	if r.Debug {
 		fmt.Println("stop", done, err)
 	}
@@ -98,7 +98,7 @@ func (r *ZipScanner) stop(done bool, err error) bool {
 	return !r.done
 }
 
-func (r *ZipScanner) readError(err error) (io.Reader, error) {
+func (r *ZipScannerImpl) readError(err error) (io.Reader, error) {
 	if r.Debug {
 		fmt.Println("readError", err)
 	}
@@ -108,7 +108,7 @@ func (r *ZipScanner) readError(err error) (io.Reader, error) {
 	return nil, r.err
 }
 
-func (r *ZipScanner) Scan() bool {
+func (r *ZipScannerImpl) Scan() bool {
 	if r.fr != nil {
 		if !r.done && (r.fh.Flags&hasDataDescriptor) != 0 {
 			// data descriptor
@@ -202,7 +202,7 @@ func (r *ZipScanner) Scan() bool {
 	return r.stop(false, nil)
 }
 
-func (r *ZipScanner) Reader() (io.Reader, error) {
+func (r *ZipScannerImpl) Reader() (io.Reader, error) {
 	switch r.fh.Method {
 	case zip.Deflate:
 		if r.Debug {
