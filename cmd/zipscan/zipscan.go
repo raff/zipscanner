@@ -10,8 +10,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/raff/zipscanner"
 	"github.com/gobs/httpclient"
+	"github.com/raff/zipscanner"
 )
 
 func main() {
@@ -19,6 +19,7 @@ func main() {
 	//view := flag.Bool("v", false, "view list")
 	//out := flag.String("out", "", "write recovered files to output zip file")
 	//override := flag.Bool("override", false, "override existing files")
+	extract := flag.Bool("extract", false, "extract files")
 
 	flag.Parse()
 
@@ -53,6 +54,7 @@ func main() {
 	zs.Debug = *debug
 
 	count := 0
+	lastdir := ""
 
 	for zs.Scan() {
 		f := zs.FileHeader()
@@ -63,7 +65,44 @@ func main() {
 			log.Fatal(err)
 		}
 
-		io.Copy(ioutil.Discard, r)
+		w := ioutil.Discard
+
+		var fw *os.File
+
+		if *extract {
+			var err error
+
+			if strings.HasSuffix(f.Name, "/") { // assume is a folder
+				if f.UncompressedSize != 0 {
+					log.Println("folder", f.Name, "size", f.UncompressedSize)
+				}
+
+				continue
+			}
+
+			dir := path.Dir(f.Name)
+			if dir != "" && dir != lastdir {
+				err = os.Mkdir(dir, os.ModeDir|0755)
+				if err != nil {
+					log.Println(err)
+				} else {
+					lastdir = dir
+				}
+			}
+
+			fw, err = os.Create(f.Name)
+			if err != nil {
+				log.Println(err)
+			} else {
+				w = fw
+			}
+		}
+
+		io.Copy(w, r)
+
+		if fw != nil {
+			fw.Close()
+		}
 
 		count += 1
 	}
