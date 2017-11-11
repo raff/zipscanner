@@ -1,9 +1,9 @@
 package zipscanner
 
 import (
-	"io"
 	"archive/zip"
-	)
+	"io"
+)
 
 //
 // ZipWrapper wraps a zip.Reader into a ZipScanner compatible interface
@@ -53,4 +53,3 @@ func (z *ZipWrapper) Reader() (io.Reader, error) {
 func (z *ZipWrapper) Error() error {
 	return z.err
 }
-
