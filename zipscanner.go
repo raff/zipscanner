@@ -14,12 +14,13 @@ import (
 // from archive/zip struct.go
 
 const (
-	fileHeaderSignature      = 0x04034b50
-	directoryHeaderSignature = 0x02014b50
-	dataDescriptorSignature  = 0x08074b50 // de-facto standard; required by OS X Finder
-	fileHeaderLen            = 30         // + filename + extra
-	dataDescriptorLen        = 16         // four uint32: descriptor signature, crc32, compressed size, size
-	dataDescriptor64Len      = 24         // descriptor with 8 byte sizes
+	fileHeaderSignature       = 0x04034b50
+	directoryHeaderSignature  = 0x02014b50
+	dataDescriptorSignature   = 0x08074b50 // de-facto standard; required by OS X Finder
+	archiveExtraDataSignature = 0x08064b50
+	fileHeaderLen             = 30 // + filename + extra
+	dataDescriptorLen         = 12 // three uint32: crc32, compressed size, size (dataDescriptionSignature may not be there)
+	dataDescriptor64Len       = 20 // descriptor with 8 byte sizes
 
 	// version numbers
 	zipVersion20 = 20 // 2.0
@@ -112,32 +113,55 @@ func (r *ZipScannerImpl) Scan() bool {
 	if r.fr != nil {
 		if !r.done && (r.fh.Flags&hasDataDescriptor) != 0 {
 			// data descriptor
-			var dd [dataDescriptorLen]byte
+			var dd [dataDescriptor64Len]byte
 
-			if _, err := io.ReadFull(r.reader, dd[:]); err != nil {
-				return r.stop(true, err)
+			dl := dataDescriptorLen
+			if r.fh.CreatorVersion >= zipVersion45 {
+				dl = dataDescriptor64Len
+			}
+
+			if _, err := io.ReadFull(r.reader, dd[0:4]); err != nil {
+				return r.stop(true, InvalidDataDescriptorHeader)
+			}
+
+			var hasMagic bool
+
+			b := readBuf(dd[0:4])
+			if b.uint32() == dataDescriptorSignature {
+				hasMagic = true
+
+				if _, err := io.ReadFull(r.reader, dd[:dl]); err != nil {
+					return r.stop(true, InvalidDataDescriptorHeader)
+				}
+			} else if _, err := io.ReadFull(r.reader, dd[4:dl-4]); err != nil {
+				return r.stop(true, InvalidDataDescriptorHeader)
 			}
 
 			if r.Debug {
-				fmt.Println(hex.Dump(dd[:]))
+				fmt.Println(hex.Dump(dd[:dl]))
 			}
 
-			b := readBuf(dd[:])
-			magic := b.uint32()
+			b = readBuf(dd[:dl])
 			crc := b.uint32()
-			csize := b.uint32()
-			usize := b.uint32()
+
+			var csize, usize uint64
+
+			if r.fh.CreatorVersion < zipVersion45 {
+				csize = uint64(b.uint32())
+				usize = uint64(b.uint32())
+			} else {
+				csize = b.uint64()
+				usize = b.uint64()
+			}
 
 			if r.Debug {
 				fmt.Println()
-				fmt.Printf("magic   %08x\n", magic)
+				if hasMagic {
+					fmt.Printf("magic   %08x\n", dataDescriptorSignature)
+				}
 				fmt.Printf("crc32   %08x\n", crc)
 				fmt.Printf("compressed size   %d\n", csize)
 				fmt.Printf("uncompressed size %d\n", usize)
-			}
-
-			if magic != dataDescriptorSignature {
-				return r.stop(true, InvalidDataDescriptorHeader)
 			}
 		}
 
