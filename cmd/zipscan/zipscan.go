@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/gobs/httpclient"
@@ -16,10 +17,9 @@ import (
 
 func main() {
 	debug := flag.Bool("debug", false, "print debug info")
-	//view := flag.Bool("v", false, "view list")
-	//out := flag.String("out", "", "write recovered files to output zip file")
-	//override := flag.Bool("override", false, "override existing files")
 	extract := flag.Bool("extract", false, "extract files")
+	nodir := flag.Bool("no-dir", false, "don't create subdirectories - extract in current directory")
+	match := flag.String("match", "", "match filenames to extract")
 
 	flag.Parse()
 
@@ -29,8 +29,13 @@ func main() {
 
 	zipfile := flag.Arg(0)
 
-	var reader io.Reader
+	var match_re *regexp.Regexp
 
+	if *match != "" {
+		match_re = regexp.MustCompile(*match)
+	}
+
+	var reader io.Reader
 	if strings.Contains(zipfile, "://") { // URL
 		resp, err := httpclient.NewHttpClient(zipfile).Get("", nil, nil)
 		if err != nil {
@@ -58,7 +63,13 @@ func main() {
 
 	for zs.Scan() {
 		f := zs.FileHeader()
-		fmt.Printf("%8d %8d %8x %s\n", f.CompressedSize, f.UncompressedSize, f.CRC32, f.Name)
+
+		process := match_re == nil || match_re.MatchString(f.Name)
+
+		if process {
+			fmt.Printf("%8d %8d %8x %s\n", f.CompressedSize, f.UncompressedSize, f.CRC32, f.Name)
+			count += 1
+		}
 
 		r, err := zs.Reader()
 		if err != nil {
@@ -80,21 +91,29 @@ func main() {
 				continue
 			}
 
-			dir := path.Dir(f.Name)
-			if dir != "" && dir != lastdir {
-				err = os.Mkdir(dir, os.ModeDir|0755)
+			if process {
+				filename := f.Name
+
+				if *nodir {
+					filename = path.Base(filename)
+				} else {
+					dir := path.Dir(filename)
+					if dir != "" && dir != lastdir {
+						err = os.Mkdir(dir, os.ModeDir|0755)
+						if err != nil {
+							log.Println(err)
+						} else {
+							lastdir = dir
+						}
+					}
+				}
+
+				fw, err = os.Create(filename)
 				if err != nil {
 					log.Println(err)
 				} else {
-					lastdir = dir
+					w = fw
 				}
-			}
-
-			fw, err = os.Create(f.Name)
-			if err != nil {
-				log.Println(err)
-			} else {
-				w = fw
 			}
 		}
 
@@ -103,8 +122,6 @@ func main() {
 		if fw != nil {
 			fw.Close()
 		}
-
-		count += 1
 	}
 
 	fmt.Println("total", count)
