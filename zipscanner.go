@@ -121,6 +121,10 @@ func (r *ZipScannerImpl) Scan() bool {
 			}
 
 			if _, err := io.ReadFull(r.reader, dd[0:4]); err != nil {
+                                if r.Debug {
+                                    fmt.Println(err)
+                                }
+
 				return r.stop(true, InvalidDataDescriptorHeader)
 			}
 
@@ -131,9 +135,17 @@ func (r *ZipScannerImpl) Scan() bool {
 				hasMagic = true
 
 				if _, err := io.ReadFull(r.reader, dd[:dl]); err != nil {
+                                        if r.Debug {
+                                            fmt.Println(err)
+                                        }
+
 					return r.stop(true, InvalidDataDescriptorHeader)
 				}
 			} else if _, err := io.ReadFull(r.reader, dd[4:dl-4]); err != nil {
+                                if r.Debug {
+                                    fmt.Println(err)
+                                }
+
 				return r.stop(true, InvalidDataDescriptorHeader)
 			}
 
@@ -182,6 +194,10 @@ func (r *ZipScannerImpl) Scan() bool {
 	var fh [fileHeaderLen]byte
 
 	if _, err := io.ReadFull(r.reader, fh[:]); err != nil {
+                if r.Debug {
+                    fmt.Println(err)
+                }
+
 		return r.stop(true, err)
 	}
 

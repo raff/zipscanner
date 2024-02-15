@@ -10,6 +10,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+        "time"
 
 	"github.com/gobs/httpclient"
 	"github.com/raff/zipscanner"
@@ -20,11 +21,12 @@ func main() {
 	extract := flag.Bool("extract", false, "extract files")
 	nodir := flag.Bool("no-dir", false, "don't create subdirectories - extract in current directory")
 	match := flag.String("match", "", "match filenames to extract")
+        timeout := flag.Duration("timeout", time.Minute, "network timeout")
 
 	flag.Parse()
 
 	if flag.NArg() != 1 {
-		log.Fatal("usage: ", path.Base(os.Args[0]), " {zip-file}")
+		log.Fatal("usage: ", path.Base(os.Args[0]), "[-debug] [-extract] [-no-dir] [-match=filename] {zip-file}")
 	}
 
 	zipfile := flag.Arg(0)
@@ -37,6 +39,12 @@ func main() {
 
 	var reader io.Reader
 	if strings.Contains(zipfile, "://") { // URL
+                httpclient.SetTimeout(*timeout)
+
+                if *debug {
+                        httpclient.StartLogging(false, false, true)
+                }
+
 		resp, err := httpclient.NewHttpClient(zipfile).Get("", nil, nil)
 		if err != nil {
 			log.Println(zipfile, err)
@@ -69,7 +77,9 @@ func main() {
 		if process {
 			fmt.Printf("%8d %8d %8x %s\n", f.CompressedSize, f.UncompressedSize, f.CRC32, f.Name)
 			count += 1
-		}
+		} else if *extract {
+                        fmt.Println("skip", f.Name)
+                }
 
 		r, err := zs.Reader()
 		if err != nil {
